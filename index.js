@@ -14,17 +14,23 @@ var fetch = require('node-fetch')
 var {
   prom,
   blocks_baked_total,
-  blocks_baked_cycle,
   blocks_missed_total,
   blocks_stolen_total,
-  operation_endorsements,
+  blocks_baked_cycle,
+  blocks_missed_cycle,
+  blocks_stolen_cycle,
+  operation_endorsements_total,
+  operation_endorsements_missed_total,
+  operation_endorsements_stolen_total,
   operation_endorsements_cycle,
-  operation_endorsements_missed,
-  operation_endorsements_stolen,
+  operation_endorsements_missed_cycle,
+  operation_endorsements_stolen_cycle,
   balance_total,
   balance_spendable,
   balance_frozen,
-  balance_rewards
+  balance_rewards,
+  head_block,
+  head_cycle
 } = require('./metrics')
 var {
   setupLabels,
@@ -49,28 +55,33 @@ var query = async () => {
   let head = await fetch(`${baseUri}/chains/main/blocks/head`)
     .then(res => res.json())
     .catch(e => { console.error(e.message) })
-  let head_block = head.header.level
-  if (head_block === last_block_processed)
+  let block = head.header.level
+  if (block === last_block_processed)
     return
+  last_block_processed = block
+  head_block.set(labels, block) 
   let cycle = head.metadata.level.cycle
-  let resetCycle = false
   if (cycle > last_cycle_processed) {
     last_cycle_processed = cycle
-    resetCycle = true
+    head_cycle.set(labels, cycle)
+    blocks_baked_cycle.set(labels, 0)
+    blocks_missed_cycle.set(labels, 0)
+    blocks_stolen_cycle.set(labels, 0)
+    operation_endorsements_cycle.set(labels, 0)
+    operation_endorsements_missed_cycle.set(labels, 0)
+    operation_endorsements_stolen_cycle.set(labels, 0)
   }
-  console.log(`Processing block ${head_block} for cycle ${cycle}`)
-  last_block_processed = head_block
+  console.log(`Processing block ${block} for cycle ${cycle}`)
 
   // Bakes 
 
   let baker = head.metadata.baker
   if (baker === args.baker) {
     blocks_baked_total.increment(labels)
-    let cycle_value = resetCycle ? 0 : getCurrentGaugeValue(blocks_baked_cycle)
-    blocks_baked_cycle.set(labels, cycle_value+1)
+    blocks_baked_cycle.set(labels, getCurrentGaugeValue(blocks_baked_cycle)+1)
   } 
 
-  let bakingRights = await fetch(`${baseUri}/chains/main/blocks/${head_block}/helpers/baking_rights?delegate=${args.baker}&level=${head_block}&all`)
+  let bakingRights = await fetch(`${baseUri}/chains/main/blocks/${block}/helpers/baking_rights?delegate=${args.baker}&level=${block}&all`)
     .then(res => res.json())
     .catch(err => console.error(err.message))
 
@@ -79,10 +90,14 @@ var query = async () => {
     if (br.priority === 0)
       shouldHaveBaked++
   })
-  if (shouldHaveBaked > 0 && baker !== args.baker)
+  if (shouldHaveBaked > 0 && baker !== args.baker) {
     blocks_missed_total.increment(labels)
-  if (shouldHaveBaked === 0 && baker === args.baker)
+    blocks_missed_cycle.set(labels, getCurrentGaugeValue(blocks_missed_cycle)+1)
+  }
+  if (shouldHaveBaked === 0 && baker === args.baker) {
     blocks_stolen_total.increment(labels)
+    blocks_stolen_cycle.set(labels, getCurrentGaugeValue(blocks_stolen_cycle)+1)
+  }
 
   // Endorsements
 
@@ -96,12 +111,11 @@ var query = async () => {
     })
   })
   if (endorsements) {
-    operation_endorsements.increment(labels, endorsements)
-    let cycle_value = resetCycle ? 0 : getCurrentGaugeValue(operation_endorsements_cycle) 
-    operation_endorsements_cycle.set(labels, cycle_value+1)
+    operation_endorsements_total.increment(labels, endorsements)
+    operation_endorsements_cycle.set(labels, getCurrentGaugeValue(operation_endorsements_cycle)+1)
   }
 
-  let endorsingRights = await fetch(`${baseUri}/chains/main/blocks/${head_block}/helpers/endorsing_rights?delegate=${args.baker}&level=${head_block}`)
+  let endorsingRights = await fetch(`${baseUri}/chains/main/blocks/${block}/helpers/endorsing_rights?delegate=${args.baker}&level=${block}`)
     .then(res => res.json())
     .catch(err => console.error(err.message))
 
@@ -110,26 +124,32 @@ var query = async () => {
     if (er.slots.indexOf(0) >= 0)
       shouldHaveEndorsed++
   })
-  if (shouldHaveEndorsed > endorsements)
-    operation_endorsements_missed.increment(labels)
-  if (shouldHaveEndorsed < endorsements) 
-    operation_endorsements_stolen.increment(labels)
+  let ediff = Math.abs(shouldHaveEndorsed - endorsements)
+  if (shouldHaveEndorsed > endorsements) {
+    operation_endorsements_missed_total.increment(labels, ediff)
+    operation_endorsements_missed_cycle.set(labels, getCurrentGaugeValue(operation_endorsements_missed_cycle)+ediff)
+
+  }
+  if (shouldHaveEndorsed < endorsements) { 
+    operation_endorsements_stolen_total.increment(labels, ediff)
+    operation_endorsements_stolen_cycle.set(labels, getCurrentGaugeValue(operation_endorsements_stolen_cycle)+ediff)
+  }
 
   // Balance
 
-  let cbal = await fetch(`${baseUri}/chains/main/blocks/${head_block}/context/contracts/${args.baker}/balance`)
+  let cbal = await fetch(`${baseUri}/chains/main/blocks/${block}/context/contracts/${args.baker}/balance`)
     .then(res => res.text())
     .then(txt => parseInt(txt.replace(/"/g,'')))
     .catch(e => { console.error(e.message) })
-  let dbal = await fetch(`${baseUri}/chains/main/blocks/${head_block}/context/delegates/${args.baker}/balance`)
+  let dbal = await fetch(`${baseUri}/chains/main/blocks/${block}/context/delegates/${args.baker}/balance`)
     .then(res => res.text())
     .then(txt => parseInt(txt.replace(/"/g,'')))
     .catch(e => { console.error(e.message) })
-  let fbal = await fetch(`${baseUri}/chains/main/blocks/${head_block}/context/delegates/${args.baker}/frozen_balance`)
+  let fbal = await fetch(`${baseUri}/chains/main/blocks/${block}/context/delegates/${args.baker}/frozen_balance`)
     .then(res => res.text())
     .then(txt => parseInt(txt.replace(/"/g,'')))
     .catch(e => { console.error(e.message) })
-  let sbal = await fetch(`${baseUri}/chains/main/blocks/${head_block}/context/delegates/${args.baker}/staking_balance`)
+  let sbal = await fetch(`${baseUri}/chains/main/blocks/${block}/context/delegates/${args.baker}/staking_balance`)
     .then(res => res.text())
     .then(txt => parseInt(txt.replace(/"/g,'')))
     .catch(e => { console.error(e.message) })

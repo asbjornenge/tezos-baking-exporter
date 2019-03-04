@@ -10,96 +10,65 @@ var args = require('minimist')(process.argv.slice(2), {
     interval     : process.env['QUERY_INTERVAL'] || 30000
   }
 })
-var Prometheus = require('prometheus-client')
 var fetch = require('node-fetch')
-var baseUri = `${args['node-proto']}://${args['node-host']}:${args['node-port']}`
+var {
+  prom,
+  blocks_baked_total,
+  blocks_baked_cycle,
+  blocks_missed_total,
+  blocks_stolen_total,
+  operation_endorsements,
+  operation_endorsements_cycle,
+  operation_endorsements_missed,
+  operation_endorsements_stolen,
+  balance_total,
+  balance_spendable,
+  balance_frozen,
+  balance_rewards
+} = require('./metrics')
+var {
+  setupLabels,
+  getCurrentGaugeValue 
+} = require('./utils')
 
 // Validate args
 
 if (!args.baker) throw new Error('Missing baker arg')
 
-var prom = new Prometheus()
-var blocks_baked = prom.newCounter({
-  namespace: 'tezos_baker',
-  name: 'blocks_baked',
-  help: '# Blocks baked'
-})
-var blocks_missed = prom.newCounter({
-  namespace: 'tezos_baker',
-  name: 'blocks_missed',
-  help: '# Blocks missed'
-})
-var blocks_stolen = prom.newCounter({
-  namespace: 'tezos_baker',
-  name: 'blocks_stolen',
-  help: '# Blocks stolen'
-})
-var operation_endorsements = prom.newCounter({
-  namespace: 'tezos_baker',
-  name: 'operation_endorsements',
-  help: '# Endorsements made'
-})
-var operation_endorsements_missed = prom.newCounter({
-  namespace: 'tezos_baker',
-  name: 'operation_endorsements_missed',
-  help: '# Endorsements missed'
-})
-var operation_endorsements_stolen = prom.newCounter({
-  namespace: 'tezos_baker',
-  name: 'operation_endorsements_stolen',
-  help: '# Endorsements stolen'
-})
-var balance_total = prom.newGauge({
-  namespace: 'tezos_baker',
-  name: 'balance_total',
-  help: '# Total balance'
-})
-var balance_spendable = prom.newGauge({
-  namespace: 'tezos_baker',
-  name: 'balance_spendable',
-  help: '# Spendable balance'
-})
-var balance_frozen = prom.newGauge({
-  namespace: 'tezos_baker',
-  name: 'balance_frozen',
-  help: '# Frozen balance'
-})
-var balance_rewards = prom.newGauge({
-  namespace: 'tezos_baker',
-  name: 'balance_rewards',
-  help: '# Pending rewards'
-})
+// Variables
 
-// endorsements, accusations?, balances, rewards
-
-var labels = {
-  baker: args.baker
-}
-if (args.label) {
-  if (typeof args.label === 'string') args.label = [args.label]
-  let argLabels = {}
-  args.label.forEach(l => {
-    let _l = l.split('=')
-    argLabels[_l[0]] = _l[1]   
-  }) 
-  labels = Object.assign(labels, argLabels)
-}
+var baseUri = `${args['node-proto']}://${args['node-host']}:${args['node-port']}`
+var labels = setupLabels(args)
 
 var last_block_processed = 0
+var last_cycle_processed = 0
 var query = async () => {
+
+  // Head block
+
   let head = await fetch(`${baseUri}/chains/main/blocks/head`)
     .then(res => res.json())
     .catch(e => { console.error(e.message) })
   let head_block = head.header.level
   if (head_block === last_block_processed)
     return
-  console.log(`Processing block ${head_block}`)
+  let cycle = head.metadata.level.cycle
+  let resetCycle = false
+  if (cycle > last_cycle_processed) {
+    last_cycle_processed = cycle
+    resetCycle = true
+  }
+  console.log(`Processing block ${head_block} for cycle ${cycle}`)
   last_block_processed = head_block
 
   // Bakes 
 
   let baker = head.metadata.baker
-  if (baker === args.baker) blocks_baked.increment(labels) 
+  if (baker === args.baker) {
+    blocks_baked_total.increment(labels)
+    let cycle_value = resetCycle ? 0 : getCurrentGaugeValue(blocks_baked_cycle)
+    blocks_baked_cycle.set(labels, cycle_value+1)
+  } 
 
   let bakingRights = await fetch(`${baseUri}/chains/main/blocks/${head_block}/helpers/baking_rights?delegate=${args.baker}&level=${head_block}&all`)
     .then(res => res.json())
@@ -111,9 +80,9 @@ var query = async () => {
       shouldHaveBaked++
   })
   if (shouldHaveBaked > 0 && baker !== args.baker)
-    blocks_missed.increment(labels)
+    blocks_missed_total.increment(labels)
   if (shouldHaveBaked === 0 && baker === args.baker)
-    blocks_stolen.increment(labels)
+    blocks_stolen_total.increment(labels)
 
   // Endorsements
 
@@ -126,7 +95,11 @@ var query = async () => {
       })
     })
   })
-  if (endorsements) operation_endorsements.increment(labels, endorsements) 
+  if (endorsements) {
+    operation_endorsements.increment(labels, endorsements)
+    let cycle_value = resetCycle ? 0 : getCurrentGaugeValue(operation_endorsements_cycle) 
+    operation_endorsements_cycle.set(labels, cycle_value+1)
+  }
 
   let endorsingRights = await fetch(`${baseUri}/chains/main/blocks/${head_block}/helpers/endorsing_rights?delegate=${args.baker}&level=${head_block}`)
     .then(res => res.json())

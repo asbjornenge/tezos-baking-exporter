@@ -1,7 +1,7 @@
 # Tezos Baking Exporter
 
-Tezos Baking Exporter is a metrics exporter for [Prometheus](https://prometheus.io/).  
-It exports metrics about a given baker.  
+Tezos Baking Exporter is a metrics exporter for [Prometheus](https://prometheus.io/).
+It exports metrics about a given baker.
 It collectes metrics from a given node using the [RPC API](http://tezos.gitlab.io/mainnet/api/rpc.html).
 
 ## Run

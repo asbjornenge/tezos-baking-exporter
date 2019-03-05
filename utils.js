@@ -1,7 +1,5 @@
-var getCurrentGaugeValue = (gauge) => {
-  let values = gauge.values()
-  let current_value = values.length === 0 ? 0 : values[0][1]
-  return current_value
+var getCurrentGaugeValue = (gauge, labels) => {
+  return gauge._getValue(labels)
 }
 
 var setupLabels = (args) => {

@@ -77,8 +77,8 @@ var query = async () => {
 
   let baker = head.metadata.baker
   if (baker === args.baker) {
-    blocks_baked_total.increment(labels)
-    blocks_baked_cycle.set(labels, getCurrentGaugeValue(blocks_baked_cycle)+1)
+    blocks_baked_total.inc(labels)
+    blocks_baked_cycle.set(labels, getCurrentGaugeValue(blocks_baked_cycle, labels)+1)
   } 
 
   let bakingRights = await fetch(`${baseUri}/chains/main/blocks/${block}/helpers/baking_rights?delegate=${args.baker}&level=${block}&all`)
@@ -91,12 +91,12 @@ var query = async () => {
       shouldHaveBaked++
   })
   if (shouldHaveBaked > 0 && baker !== args.baker) {
-    blocks_missed_total.increment(labels)
-    blocks_missed_cycle.set(labels, getCurrentGaugeValue(blocks_missed_cycle)+1)
+    blocks_missed_total.inc(labels)
+    blocks_missed_cycle.set(labels, getCurrentGaugeValue(blocks_missed_cycle, labels)+1)
   }
   if (shouldHaveBaked === 0 && baker === args.baker) {
-    blocks_stolen_total.increment(labels)
-    blocks_stolen_cycle.set(labels, getCurrentGaugeValue(blocks_stolen_cycle)+1)
+    blocks_stolen_total.inc(labels)
+    blocks_stolen_cycle.set(labels, getCurrentGaugeValue(blocks_stolen_cycle, labels)+1)
   }
 
   // Endorsements
@@ -111,8 +111,8 @@ var query = async () => {
     })
   })
   if (endorsements) {
-    operation_endorsements_total.increment(labels, endorsements)
-    operation_endorsements_cycle.set(labels, getCurrentGaugeValue(operation_endorsements_cycle)+1)
+    operation_endorsements_total.inc(labels, endorsements)
+    operation_endorsements_cycle.set(labels, getCurrentGaugeValue(operation_endorsements_cycle, labels)+1)
   }
 
   let endorsingRights = await fetch(`${baseUri}/chains/main/blocks/${block}/helpers/endorsing_rights?delegate=${args.baker}&level=${block}`)
@@ -126,13 +126,13 @@ var query = async () => {
   })
   let ediff = Math.abs(shouldHaveEndorsed - endorsements)
   if (shouldHaveEndorsed > endorsements) {
-    operation_endorsements_missed_total.increment(labels, ediff)
-    operation_endorsements_missed_cycle.set(labels, getCurrentGaugeValue(operation_endorsements_missed_cycle)+ediff)
+    operation_endorsements_missed_total.inc(labels, ediff)
+    operation_endorsements_missed_cycle.set(labels, getCurrentGaugeValue(operation_endorsements_missed_cycle, labels)+ediff)
 
   }
   if (shouldHaveEndorsed < endorsements) { 
-    operation_endorsements_stolen_total.increment(labels, ediff)
-    operation_endorsements_stolen_cycle.set(labels, getCurrentGaugeValue(operation_endorsements_stolen_cycle)+ediff)
+    operation_endorsements_stolen_total.inc(labels, ediff)
+    operation_endorsements_stolen_cycle.set(labels, getCurrentGaugeValue(operation_endorsements_stolen_cycle, labels)+ediff)
   }
 
   // Balance
@@ -161,5 +161,15 @@ var query = async () => {
 }
 
 setInterval(query, args.interval)
-prom.listen(args.port)
-console.log(`Exposing metrics on http://${args.host}:${args.port}/metrics`)
+const http = require('http')
+const server = http.createServer((req, res) => {
+  if (req.url !== '/metrics') {
+    res.writeHead(404, 'Not found')
+    return res.end()
+  }
+  res.setHeader('Content-Type', prom.register.contentType)
+  res.end(prom.register.metrics())
+})
+server.listen(args.port, args.host, () => {
+  console.log(`Exposing metrics on http://${args.host}:${args.port}/metrics`)
+})

@@ -4,13 +4,19 @@ Tezos Baking Exporter is a metrics exporter for [Prometheus](https://prometheus.
 It exports metrics about a given baker.
 It collectes metrics from a given node using the [RPC API](http://tezos.gitlab.io/mainnet/api/rpc.html).
 
+**NB! - Work In Progress!**
+
+This is by on means complete or on par with tzscan or kiln or similar. I'm fairly sure I parse some of the metrics incorrectly (particularly the endorsement rights). If you have any insight into how this should be done, please submit a PR or an issue. Thanks :+1: 
+
 ## Run
 
 ```
 docker run --rm -p 9090:9090 asbjornenge/tezos-baking-exporter:latest ---host 0.0.0.0 --interval 10000 --node-host <node-ip> --baker <tz1...> --label network=zeronet
 ```
 
-:tada:
+Now scrape that with Prometheus and load up [Grafana](https://grafana.com/) with `dashboards/grafana-tezos-baker.json` :tada:
+
+![Grafana Screenshot](/screenshots/tezos-baking-exporter-grafana.png.png?raw=true "Grafana Screenshot")
 
 ## Options
 

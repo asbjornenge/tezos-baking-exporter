@@ -16,7 +16,7 @@ docker run --rm -p 9090:9090 asbjornenge/tezos-baking-exporter:latest ---host 0.
 
 Now scrape that with Prometheus and load up [Grafana](https://grafana.com/) with `dashboards/grafana-tezos-baker.json` :tada:
 
-![Grafana Screenshot](/screenshots/tezos-baking-exporter-grafana.png.png?raw=true "Grafana Screenshot")
+![Grafana Screenshot](/screenshots/tezos-baking-exporter-grafana.png?raw=true "Grafana Screenshot")
 
 ## Options
 

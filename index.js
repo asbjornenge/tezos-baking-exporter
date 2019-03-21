@@ -7,7 +7,8 @@ var args = require('minimist')(process.argv.slice(2), {
     'node-host'  : process.env['NODE_HOST'] || 'localhost',
     'node-port'  : process.env['NODE_PORT'] || 8732,
     baker        : process.env['BAKER'],
-    interval     : process.env['QUERY_INTERVAL'] || 30000
+    interval     : process.env['QUERY_INTERVAL'] || 30000,
+    chain        : process.env['CHAIN'] || 'main'
   }
 })
 var fetch = require('node-fetch')
@@ -52,7 +53,7 @@ var query = async () => {
 
   // Head block
 
-  let head = await fetch(`${baseUri}/chains/main/blocks/head`)
+  let head = await fetch(`${baseUri}/chains/${args.chain}/blocks/head`)
     .then(res => res.json())
     .catch(e => { console.error(e.message) })
   let block = head.header.level
@@ -81,7 +82,7 @@ var query = async () => {
     blocks_baked_cycle.set(labels, getCurrentGaugeValue(blocks_baked_cycle, labels)+1)
   } 
 
-  let bakingRights = await fetch(`${baseUri}/chains/main/blocks/${block}/helpers/baking_rights?delegate=${args.baker}&level=${block}&all`)
+  let bakingRights = await fetch(`${baseUri}/chains/${args.chain}/blocks/${block}/helpers/baking_rights?delegate=${args.baker}&level=${block}&all`)
     .then(res => res.json())
     .catch(err => console.error(err.message))
 
@@ -115,7 +116,7 @@ var query = async () => {
     operation_endorsements_cycle.set(labels, getCurrentGaugeValue(operation_endorsements_cycle, labels)+1)
   }
 
-  let endorsingRights = await fetch(`${baseUri}/chains/main/blocks/${block}/helpers/endorsing_rights?delegate=${args.baker}&level=${block}`)
+  let endorsingRights = await fetch(`${baseUri}/chains/${args.chain}/blocks/${block}/helpers/endorsing_rights?delegate=${args.baker}&level=${block}`)
     .then(res => res.json())
     .catch(err => console.error(err.message))
 
@@ -137,19 +138,19 @@ var query = async () => {
 
   // Balance
 
-  let cbal = await fetch(`${baseUri}/chains/main/blocks/${block}/context/contracts/${args.baker}/balance`)
+  let cbal = await fetch(`${baseUri}/chains/${args.chain}/blocks/${block}/context/contracts/${args.baker}/balance`)
     .then(res => res.text())
     .then(txt => parseInt(txt.replace(/"/g,'')))
     .catch(e => { console.error(e.message) })
-  let dbal = await fetch(`${baseUri}/chains/main/blocks/${block}/context/delegates/${args.baker}/balance`)
+  let dbal = await fetch(`${baseUri}/chains/${args.chain}/blocks/${block}/context/delegates/${args.baker}/balance`)
     .then(res => res.text())
     .then(txt => parseInt(txt.replace(/"/g,'')))
     .catch(e => { console.error(e.message) })
-  let fbal = await fetch(`${baseUri}/chains/main/blocks/${block}/context/delegates/${args.baker}/frozen_balance`)
+  let fbal = await fetch(`${baseUri}/chains/${args.chain}/blocks/${block}/context/delegates/${args.baker}/frozen_balance`)
     .then(res => res.text())
     .then(txt => parseInt(txt.replace(/"/g,'')))
     .catch(e => { console.error(e.message) })
-  let sbal = await fetch(`${baseUri}/chains/main/blocks/${block}/context/delegates/${args.baker}/staking_balance`)
+  let sbal = await fetch(`${baseUri}/chains/${args.chain}/blocks/${block}/context/delegates/${args.baker}/staking_balance`)
     .then(res => res.text())
     .then(txt => parseInt(txt.replace(/"/g,'')))
     .catch(e => { console.error(e.message) })

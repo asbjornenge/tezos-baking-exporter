@@ -31,6 +31,7 @@ cli           env             default     wat
 --node-host   NODE_HOST       localhost   What host to query node
 --node-port   NODE_PORT       8732        What port to query node
 --interval    QUERY_INTERVAL  30000       Collection interval
+--chain       CHAIN           main        Chain to query (useful for testing periods)
 --baker       BAKER           -           tz1... (baker address - required)
 --label       -               -           Add metric labels (ex. --label network=zeronet)
 ```
